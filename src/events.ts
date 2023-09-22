@@ -1,12 +1,19 @@
 import { DurableObjectState } from "@cloudflare/workers-types";
 import { WorkflowMethods } from ".";
+import { NonDeterministicError } from "./errors";
 
-export type EventType = 'ActivityStart' | 'ActivityFailure' | 'ActivityResult' | 'SignalRecevied' | 'SignalReturned'
+export type EventType = 'ActivityStart' | 'ActivityFailure' | 'ActivityResult' | 'SignalRecevied' | 'SignalListenerCreated' | 'SignalReturned' | 'Sleep'
 
 interface HistoryItem {
   type: EventType
-  input?: any
-  output?: any
+  /**
+   * For activities, this is the name, for everything else this is the stringified JSON of the parameters
+   */
+  input: string
+  /**
+   * For Activity and WaitForSignal
+   */
+  output?: string
   /**
    * The sequence number appearing in the list
    */
@@ -24,22 +31,65 @@ export class Events implements WorkflowMethods {
     this.memHist = []
   }
 
-  private handleExecution(t: EventType, input?: any, output?: any) {
-    if (this.offset != this.memHist.length) {
+  private handleExecution(t: EventType, input: string, output: string) {
+    if (this.offset !== this.memHist.length) {
       // Let's check if this is the next item
-      
+      let nextItem: HistoryItem
+      while (true) {
+        nextItem = this.memHist[this.offset]
+        if (nextItem.type === 'SignalRecevied') {
+          // These are skippable
+          this.offset++
+          continue
+        }
+        if (nextItem.type !== t || nextItem.input !== input) {
+          // Non-deterministic behavior
+          throw new NonDeterministicError({
+            type: nextItem.type,
+            input: nextItem.input
+          }, {
+            input: input,
+            type: t
+          })
+        }
+
+        // Otherwise we return the output
+        return nextItem.output
+      }
+    }
+
+    // Otherwise we process it
+    const thisItem: HistoryItem = {
+      input: input,
+      seq: this.offset,
+      type: t
+    }
+
+    switch (t) {
+      case 'ActivityStart':
+        
+        break;
+      case 'ActivityStart':
+        
+        break;
+      case 'ActivityStart':
+        
+        break;
+    
+      default:
+        break;
     }
   }
 
-  Activity<Output>(activity: () => Promise<Output>): Promise<Output> {
+  async Activity<Output>(name: string, func: () => Output | Promise<Output>): Promise<Output> {
 
   }
 
-  Sleep(untilMS: number): Promise<void> {
+  async Sleep(untilMS: number) {
       
   }
 
-  WaitForSignal<T>(signal: string, waitForMS?: number | undefined): Promise<any> {
+  async WaitForSignal<T>(signal: string, waitForMS?: number | undefined): Promise<string | undefined> {
       
   }
 
